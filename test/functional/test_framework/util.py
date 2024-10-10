@@ -5,7 +5,7 @@
 """Helpful routines for regression testing."""
 
 from base64 import b64encode
-from decimal import Decimal, ROUND_DOWN
+from decimal import Decimal
 from subprocess import CalledProcessError
 import hashlib
 import inspect
@@ -21,7 +21,9 @@ import time
 from . import coverage
 from .authproxy import AuthServiceProxy, JSONRPCException
 from collections.abc import Callable
-from typing import Optional
+from typing import Optional, Union
+
+SATOSHI_PRECISION = Decimal('0.00000001')
 
 logger = logging.getLogger("TestFramework.utils")
 
@@ -261,8 +263,9 @@ def get_fee(tx_size, feerate_btc_kvb):
     return target_fee_sat / Decimal(1e8) # Return result in  BTC
 
 
-def satoshi_round(amount):
-    return Decimal(amount).quantize(Decimal('0.00000001'), rounding=ROUND_DOWN)
+def satoshi_round(amount: Union[int, float, str], *, rounding: str) -> Decimal:
+    """Rounds a Decimal amount to the nearest satoshi using the specified rounding mode."""
+    return Decimal(amount).quantize(SATOSHI_PRECISION, rounding=rounding)
 
 
 def wait_until_helper_internal(predicate, *, attempts=float('inf'), timeout=float('inf'), lock=None, timeout_factor=1.0):
@@ -309,6 +312,13 @@ def sha256sum_file(filename):
             h.update(d)
             d = f.read(4096)
     return h.digest()
+
+
+def util_xor(data, key, *, offset):
+    data = bytearray(data)
+    for i in range(len(data)):
+        data[i] ^= key[(i + offset) % len(key)]
+    return bytes(data)
 
 
 # RPC/P2P connection constants and functions

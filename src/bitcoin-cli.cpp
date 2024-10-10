@@ -3,7 +3,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include <config/bitcoin-config.h> // IWYU pragma: keep
+#include <bitcoin-build-config.h> // IWYU pragma: keep
 
 #include <chainparamsbase.h>
 #include <clientversion.h>
@@ -87,10 +87,10 @@ static void SetupCliArgs(ArgsManager& argsman)
                              "arguments are number of blocks to generate (default: %s) and maximum iterations to try (default: %s), equivalent to "
                              "RPC generatetoaddress nblocks and maxtries arguments. Example: bitcoin-cli -generate 4 1000",
                              DEFAULT_NBLOCKS, DEFAULT_MAX_TRIES),
-                   ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
-    argsman.AddArg("-addrinfo", "Get the number of addresses known to the node, per network and total, after filtering for quality and recency. The total number of addresses known to the node may be higher.", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
-    argsman.AddArg("-getinfo", "Get general information from the remote server. Note that unlike server-side RPC calls, the output of -getinfo is the result of multiple non-atomic requests. Some entries in the output may represent results from different states (e.g. wallet balance may be as of a different block from the chain state reported)", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
-    argsman.AddArg("-netinfo", "Get network peer connection information from the remote server. An optional integer argument from 0 to 4 can be passed for different peers listings (default: 0). Pass \"help\" for detailed help documentation.", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
+                   ArgsManager::ALLOW_ANY, OptionsCategory::CLI_COMMANDS);
+    argsman.AddArg("-addrinfo", "Get the number of addresses known to the node, per network and total, after filtering for quality and recency. The total number of addresses known to the node may be higher.", ArgsManager::ALLOW_ANY, OptionsCategory::CLI_COMMANDS);
+    argsman.AddArg("-getinfo", "Get general information from the remote server. Note that unlike server-side RPC calls, the output of -getinfo is the result of multiple non-atomic requests. Some entries in the output may represent results from different states (e.g. wallet balance may be as of a different block from the chain state reported)", ArgsManager::ALLOW_ANY, OptionsCategory::CLI_COMMANDS);
+    argsman.AddArg("-netinfo", "Get network peer connection information from the remote server. An optional integer argument from 0 to 4 can be passed for different peers listings (default: 0). Pass \"help\" for detailed help documentation.", ArgsManager::ALLOW_ANY, OptionsCategory::CLI_COMMANDS);
 
     SetupChainParamsBaseOptions(argsman);
     argsman.AddArg("-color=<when>", strprintf("Color setting for CLI output (default: %s). Valid values: always, auto (add color codes when standard output is connected to a terminal and OS is not WIN32), never.", DEFAULT_COLOR_SETTING), ArgsManager::ALLOW_ANY | ArgsManager::DISALLOW_NEGATION, OptionsCategory::OPTIONS);
@@ -950,7 +950,8 @@ static void ParseError(const UniValue& error, std::string& strPrint, int& nRet)
             strPrint += ("error message:\n" + err_msg.get_str());
         }
         if (err_code.isNum() && err_code.getInt<int>() == RPC_WALLET_NOT_SPECIFIED) {
-            strPrint += "\nTry adding \"-rpcwallet=<filename>\" option to bitcoin-cli command line.";
+            strPrint += " Or for the CLI, specify the \"-rpcwallet=<walletname>\" option before the command";
+            strPrint += " (run \"bitcoin-cli -h\" for help or \"bitcoin-cli listwallets\" to see which wallets are currently loaded).";
         }
     } else {
         strPrint = "error: " + error.write();
@@ -1212,6 +1213,7 @@ static int CommandLineRPC(int argc, char *argv[])
                 fputc('\n', stdout);
             }
         }
+        gArgs.CheckMultipleCLIArgs();
         std::unique_ptr<BaseRequestHandler> rh;
         std::string method;
         if (gArgs.IsArgSet("-getinfo")) {

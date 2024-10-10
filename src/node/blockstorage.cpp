@@ -367,7 +367,7 @@ void BlockManager::FindFilesToPrune(
         }
     }
 
-    LogPrint(BCLog::PRUNE, "[%s] target=%dMiB actual=%dMiB diff=%dMiB min_height=%d max_prune_height=%d removed %d blk/rev pairs\n",
+    LogDebug(BCLog::PRUNE, "[%s] target=%dMiB actual=%dMiB diff=%dMiB min_height=%d max_prune_height=%d removed %d blk/rev pairs\n",
              chain.GetRole(), target / 1024 / 1024, nCurrentUsage / 1024 / 1024,
              (int64_t(target) - int64_t(nCurrentUsage)) / 1024 / 1024,
              min_block_to_prune, last_block_can_prune, count);
@@ -683,11 +683,7 @@ bool BlockManager::UndoWriteToDisk(const CBlockUndo& blockundo, FlatFilePos& pos
     fileout << GetParams().MessageStart() << nSize;
 
     // Write undo data
-    long fileOutPos = ftell(fileout.Get());
-    if (fileOutPos < 0) {
-        LogError("%s: ftell failed\n", __func__);
-        return false;
-    }
+    long fileOutPos = fileout.tell();
     pos.nPos = (unsigned int)fileOutPos;
     fileout << blockundo;
 
@@ -812,7 +808,7 @@ void BlockManager::UnlinkPrunedFiles(const std::set<int>& setFilesToPrune) const
         const bool removed_blockfile{fs::remove(m_block_file_seq.FileName(pos), ec)};
         const bool removed_undofile{fs::remove(m_undo_file_seq.FileName(pos), ec)};
         if (removed_blockfile || removed_undofile) {
-            LogPrint(BCLog::BLOCKSTORAGE, "Prune: %s deleted blk/rev (%05u)\n", __func__, *it);
+            LogDebug(BCLog::BLOCKSTORAGE, "Prune: %s deleted blk/rev (%05u)\n", __func__, *it);
         }
     }
 }
@@ -844,7 +840,7 @@ FlatFilePos BlockManager::FindNextBlockPos(unsigned int nAddSize, unsigned int n
         assert(chain_type == BlockfileType::ASSUMED);
         const auto new_cursor = BlockfileCursor{this->MaxBlockfileNum() + 1};
         m_blockfile_cursors[chain_type] = new_cursor;
-        LogPrint(BCLog::BLOCKSTORAGE, "[%s] initializing blockfile cursor to %s\n", chain_type, new_cursor);
+        LogDebug(BCLog::BLOCKSTORAGE, "[%s] initializing blockfile cursor to %s\n", chain_type, new_cursor);
     }
     const int last_blockfile = m_blockfile_cursors[chain_type]->file_num;
 
@@ -887,7 +883,7 @@ FlatFilePos BlockManager::FindNextBlockPos(unsigned int nAddSize, unsigned int n
     pos.nPos = m_blockfile_info[nFile].nSize;
 
     if (nFile != last_blockfile) {
-        LogPrint(BCLog::BLOCKSTORAGE, "Leaving block file %i: %s (onto %i) (height %i)\n",
+        LogDebug(BCLog::BLOCKSTORAGE, "Leaving block file %i: %s (onto %i) (height %i)\n",
                  last_blockfile, m_blockfile_info[last_blockfile].ToString(), nFile, nHeight);
 
         // Do not propagate the return code. The flush concerns a previous block
@@ -981,11 +977,7 @@ bool BlockManager::WriteBlockToDisk(const CBlock& block, FlatFilePos& pos) const
     fileout << GetParams().MessageStart() << nSize;
 
     // Write block
-    long fileOutPos = ftell(fileout.Get());
-    if (fileOutPos < 0) {
-        LogError("%s: ftell failed\n", __func__);
-        return false;
-    }
+    long fileOutPos = fileout.tell();
     pos.nPos = (unsigned int)fileOutPos;
     fileout << TX_WITH_WITNESS(block);
 
@@ -1210,7 +1202,7 @@ public:
     }
 };
 
-void ImportBlocks(ChainstateManager& chainman, std::vector<fs::path> vImportFiles)
+void ImportBlocks(ChainstateManager& chainman, std::span<const fs::path> import_paths)
 {
     ImportingNow imp{chainman.m_blockman.m_importing};
 
@@ -1245,7 +1237,7 @@ void ImportBlocks(ChainstateManager& chainman, std::vector<fs::path> vImportFile
     }
 
     // -loadblock=
-    for (const fs::path& path : vImportFiles) {
+    for (const fs::path& path : import_paths) {
         AutoFile file{fsbridge::fopen(path, "rb")};
         if (!file.IsNull()) {
             LogPrintf("Importing blocks file %s...\n", fs::PathToString(path));

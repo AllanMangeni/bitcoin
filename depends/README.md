@@ -12,17 +12,13 @@ For example:
 
     make HOST=x86_64-w64-mingw32 -j4
 
-**Bitcoin Core's `configure` script by default will ignore the depends output.** In
+**When configuring Bitcoin Core, CMake by default will ignore the depends output.** In
 order for it to pick up libraries, tools, and settings from the depends build,
-you must set the `CONFIG_SITE` environment variable to point to a `config.site` settings file.
-Make sure that `CONFIG_SITE` is an absolute path.
-In the above example, a file named `depends/x86_64-w64-mingw32/share/config.site` will be
-created. To use it during compilation:
+you must specify the toolchain file.
+In the above example, a file named `depends/x86_64-w64-mingw32/toolchain.cmake` will be
+created. To use it during configuring Bitcoin Core:
 
-    CONFIG_SITE=$PWD/depends/x86_64-w64-mingw32/share/config.site ./configure
-
-The default install prefix when using `config.site` is `--prefix=depends/<host-platform-triplet>`,
-so depends build outputs will be installed in that location.
+    cmake -B build --toolchain depends/x86_64-w64-mingw32/toolchain.cmake
 
 Common `host-platform-triplet`s for cross compilation are:
 
@@ -45,7 +41,7 @@ The paths are automatically configured and no other options are needed.
 
 #### Common
 
-    apt install automake bison cmake curl libtool make patch pkg-config python3 xz-utils
+    apt install bison cmake curl make patch pkg-config python3 xz-utils
 
 #### For macOS cross compilation
 
@@ -90,9 +86,13 @@ For linux S390X cross compilation:
 
     pkg install bash
 
+### Install the required dependencies: NetBSD
+
+    pkgin install bash gmake
+
 ### Install the required dependencies: OpenBSD
 
-    pkg_add bash gtar
+    pkg_add bash gmake gtar
 
 ### Dependency Options
 
@@ -113,9 +113,8 @@ The following can be set when running make: `make FOO=bar`
 - `NO_BDB`: Don't download/build/cache BerkeleyDB
 - `NO_SQLITE`: Don't download/build/cache SQLite
 - `NO_UPNP`: Don't download/build/cache packages needed for enabling UPnP
-- `NO_NATPMP`: Don't download/build/cache packages needed for enabling NAT-PMP
 - `NO_USDT`: Don't download/build/cache packages needed for enabling USDT tracepoints
-- `MULTIPROCESS`: Build libmultiprocess (experimental, requires CMake)
+- `MULTIPROCESS`: Build libmultiprocess (experimental)
 - `DEBUG`: Disable some optimizations and enable more runtime checking
 - `HOST_ID_SALT`: Optional salt to use when generating host package ids
 - `BUILD_ID_SALT`: Optional salt to use when generating build package ids
@@ -125,8 +124,8 @@ The following can be set when running make: `make FOO=bar`
 - `LTO`: Enable options needed for LTO. Does not add `-flto` related options to *FLAGS.
 - `NO_HARDEN=1`: Don't use hardening options when building packages
 
-If some packages are not built, for example `make NO_WALLET=1`, the appropriate
-options will be passed to bitcoin's configure. In this case, `--disable-wallet`.
+If some packages are not built, for example `make NO_WALLET=1`, the appropriate CMake cache
+variables will be set when generating the Bitcoin Core buildsystem. In this case, `-DENABLE_WALLET=OFF`.
 
 ### Additional targets
 

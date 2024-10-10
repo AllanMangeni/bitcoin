@@ -39,9 +39,9 @@
 #include <memory>
 #include <optional>
 #include <set>
+#include <span>
 #include <stdint.h>
 #include <string>
-#include <thread>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -84,11 +84,6 @@ enum class SynchronizationState {
     INIT_DOWNLOAD,
     POST_INIT
 };
-
-extern GlobalMutex g_best_block_mutex;
-extern std::condition_variable g_best_block_cv;
-/** Used to notify getblocktemplate RPC of new tips. */
-extern uint256 g_best_block;
 
 /** Documentation for argument 'checklevel'. */
 extern const std::vector<std::string> CHECKLEVEL_DOC;
@@ -407,7 +402,7 @@ bool HasValidProofOfWork(const std::vector<CBlockHeader>& headers, const Consens
 bool IsBlockMutated(const CBlock& block, bool check_witness_root);
 
 /** Return the sum of the claimed work on a given set of headers. No verification of PoW is done. */
-arith_uint256 CalculateClaimedHeadersWork(const std::vector<CBlockHeader>& headers);
+arith_uint256 CalculateClaimedHeadersWork(std::span<const CBlockHeader> headers);
 
 enum class VerifyDBResult {
     SUCCESS,
@@ -914,7 +909,7 @@ private:
     //! Internal helper for ActivateSnapshot().
     //!
     //! De-serialization of a snapshot that is created with
-    //! CreateUTXOSnapshot() in rpc/blockchain.cpp.
+    //! the dumptxoutset RPC.
     //! To reduce space the serialization format of the snapshot avoids
     //! duplication of tx hashes. The code takes advantage of the guarantee by
     //! leveldb that keys are lexicographically sorted.
@@ -976,7 +971,7 @@ public:
 
     //! Function to restart active indexes; set dynamically to avoid a circular
     //! dependency on `base/index.cpp`.
-    std::function<void()> restart_indexes = std::function<void()>();
+    std::function<void()> snapshot_download_completed = std::function<void()>();
 
     const CChainParams& GetParams() const { return m_options.chainparams; }
     const Consensus::Params& GetConsensus() const { return m_options.chainparams.GetConsensus(); }
@@ -1007,7 +1002,6 @@ public:
 
     const util::SignalInterrupt& m_interrupt;
     const Options m_options;
-    std::thread m_thread_load;
     //! A single BlockManager instance is shared across each constructed
     //! chainstate to avoid duplicating block metadata.
     node::BlockManager m_blockman;
@@ -1217,12 +1211,12 @@ public:
      * May not be called in a
      * validationinterface callback.
      *
-     * @param[in]  block The block headers themselves
+     * @param[in]  headers The block headers themselves
      * @param[in]  min_pow_checked  True if proof-of-work anti-DoS checks have been done by caller for headers chain
      * @param[out] state This may be set to an Error state if any error occurred processing them
      * @param[out] ppindex If set, the pointer will be set to point to the last new block index object for the given headers
      */
-    bool ProcessNewBlockHeaders(const std::vector<CBlockHeader>& block, bool min_pow_checked, BlockValidationState& state, const CBlockIndex** ppindex = nullptr) LOCKS_EXCLUDED(cs_main);
+    bool ProcessNewBlockHeaders(std::span<const CBlockHeader> headers, bool min_pow_checked, BlockValidationState& state, const CBlockIndex** ppindex = nullptr) LOCKS_EXCLUDED(cs_main);
 
     /**
      * Sufficiently validate a block for disk storage (and store on disk).

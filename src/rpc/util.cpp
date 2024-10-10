@@ -2,7 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include <config/bitcoin-config.h> // IWYU pragma: keep
+#include <bitcoin-build-config.h> // IWYU pragma: keep
 
 #include <clientversion.h>
 #include <common/args.h>
@@ -19,6 +19,7 @@
 #include <script/signingprovider.h>
 #include <script/solver.h>
 #include <tinyformat.h>
+#include <uint256.h>
 #include <univalue.h>
 #include <util/check.h>
 #include <util/result.h>
@@ -80,6 +81,18 @@ void RPCTypeCheckObj(const UniValue& o,
     }
 }
 
+int ParseVerbosity(const UniValue& arg, int default_verbosity)
+{
+    if (!arg.isNull()) {
+        if (arg.isBool()) {
+            return arg.get_bool(); // true = 1
+        } else {
+            return arg.getInt<int>();
+        }
+    }
+    return default_verbosity;
+}
+
 CAmount AmountFromValue(const UniValue& value, int decimals)
 {
     if (!value.isNum() && !value.isStr())
@@ -102,11 +115,11 @@ CFeeRate ParseFeeRate(const UniValue& json)
 uint256 ParseHashV(const UniValue& v, std::string_view name)
 {
     const std::string& strHex(v.get_str());
-    if (64 != strHex.length())
-        throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("%s must be of length %d (not %d, for '%s')", name, 64, strHex.length(), strHex));
-    if (!IsHex(strHex)) // Note: IsHex("") is false
-        throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("%s must be hexadecimal string (not '%s')", name, strHex));
-    return uint256S(strHex);
+    if (auto rv{uint256::FromHex(strHex)}) return *rv;
+    if (auto expected_len{uint256::size() * 2}; strHex.length() != expected_len) {
+        throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("%s must be of length %d (not %d, for '%s')", name, expected_len, strHex.length(), strHex));
+    }
+    throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("%s must be hexadecimal string (not '%s')", name, strHex));
 }
 uint256 ParseHashO(const UniValue& o, std::string_view strKey)
 {
@@ -1345,24 +1358,26 @@ std::vector<CScript> EvalDescriptorStringOrObject(const UniValue& scanobject, Fl
     }
 
     std::string error;
-    auto desc = Parse(desc_str, provider, error);
-    if (!desc) {
+    auto descs = Parse(desc_str, provider, error);
+    if (descs.empty()) {
         throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, error);
     }
-    if (!desc->IsRange()) {
+    if (!descs.at(0)->IsRange()) {
         range.first = 0;
         range.second = 0;
     }
     std::vector<CScript> ret;
     for (int i = range.first; i <= range.second; ++i) {
-        std::vector<CScript> scripts;
-        if (!desc->Expand(i, provider, scripts, provider)) {
-            throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, strprintf("Cannot derive script without private keys: '%s'", desc_str));
+        for (const auto& desc : descs) {
+            std::vector<CScript> scripts;
+            if (!desc->Expand(i, provider, scripts, provider)) {
+                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, strprintf("Cannot derive script without private keys: '%s'", desc_str));
+            }
+            if (expand_priv) {
+                desc->ExpandPrivate(/*pos=*/i, provider, /*out=*/provider);
+            }
+            std::move(scripts.begin(), scripts.end(), std::back_inserter(ret));
         }
-        if (expand_priv) {
-            desc->ExpandPrivate(/*pos=*/i, provider, /*out=*/provider);
-        }
-        std::move(scripts.begin(), scripts.end(), std::back_inserter(ret));
     }
     return ret;
 }

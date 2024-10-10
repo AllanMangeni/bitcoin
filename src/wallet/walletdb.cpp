@@ -3,7 +3,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include <config/bitcoin-config.h> // IWYU pragma: keep
+#include <bitcoin-build-config.h> // IWYU pragma: keep
 
 #include <wallet/walletdb.h>
 
@@ -185,6 +185,17 @@ bool WalletBatch::ReadBestBlock(CBlockLocator& locator)
 {
     if (m_batch->Read(DBKeys::BESTBLOCK, locator) && !locator.vHave.empty()) return true;
     return m_batch->Read(DBKeys::BESTBLOCK_NOMERKLE, locator);
+}
+
+bool WalletBatch::IsEncrypted()
+{
+    DataStream prefix;
+    prefix << DBKeys::MASTER_KEY;
+    if (auto cursor = m_batch->GetNewPrefixCursor(prefix)) {
+        DataStream k, v;
+        if (cursor->Next(k, v) == DatabaseCursor::Status::MORE) return true;
+    }
+    return false;
 }
 
 bool WalletBatch::WriteOrderPosNext(int64_t nOrderPosNext)
@@ -1236,19 +1247,19 @@ DBErrors WalletBatch::LoadWallet(CWallet* pwallet)
 static bool RunWithinTxn(WalletBatch& batch, std::string_view process_desc, const std::function<bool(WalletBatch&)>& func)
 {
     if (!batch.TxnBegin()) {
-        LogPrint(BCLog::WALLETDB, "Error: cannot create db txn for %s\n", process_desc);
+        LogDebug(BCLog::WALLETDB, "Error: cannot create db txn for %s\n", process_desc);
         return false;
     }
 
     // Run procedure
     if (!func(batch)) {
-        LogPrint(BCLog::WALLETDB, "Error: %s failed\n", process_desc);
+        LogDebug(BCLog::WALLETDB, "Error: %s failed\n", process_desc);
         batch.TxnAbort();
         return false;
     }
 
     if (!batch.TxnCommit()) {
-        LogPrint(BCLog::WALLETDB, "Error: cannot commit db txn for %s\n", process_desc);
+        LogDebug(BCLog::WALLETDB, "Error: cannot commit db txn for %s\n", process_desc);
         return false;
     }
 

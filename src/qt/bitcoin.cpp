@@ -2,7 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include <config/bitcoin-config.h> // IWYU pragma: keep
+#include <bitcoin-build-config.h> // IWYU pragma: keep
 
 #include <qt/bitcoin.h>
 
@@ -59,21 +59,6 @@
 #include <QTimer>
 #include <QTranslator>
 #include <QWindow>
-
-#if defined(QT_STATIC)
-#include <QtPlugin>
-#if defined(QT_QPA_PLATFORM_XCB)
-Q_IMPORT_PLUGIN(QXcbIntegrationPlugin);
-#elif defined(QT_QPA_PLATFORM_WINDOWS)
-Q_IMPORT_PLUGIN(QWindowsIntegrationPlugin);
-Q_IMPORT_PLUGIN(QWindowsVistaStylePlugin);
-#elif defined(QT_QPA_PLATFORM_COCOA)
-Q_IMPORT_PLUGIN(QCocoaIntegrationPlugin);
-Q_IMPORT_PLUGIN(QMacStylePlugin);
-#elif defined(QT_QPA_PLATFORM_ANDROID)
-Q_IMPORT_PLUGIN(QAndroidPlatformIntegrationPlugin)
-#endif
-#endif
 
 // Declare meta types used for QMetaObject::invokeMethod
 Q_DECLARE_METATYPE(bool*)
@@ -212,7 +197,7 @@ void DebugMessageHandler(QtMsgType type, const QMessageLogContext& context, cons
 {
     Q_UNUSED(context);
     if (type == QtDebugMsg) {
-        LogPrint(BCLog::QT, "GUI: %s\n", msg.toStdString());
+        LogDebug(BCLog::QT, "GUI: %s\n", msg.toStdString());
     } else {
         LogPrintf("GUI: %s\n", msg.toStdString());
     }
@@ -540,7 +525,7 @@ int GuiMain(int argc, char* argv[])
 
     /// 2. Parse command-line options. We do this after qt in order to show an error if there are problems parsing these
     // Command-line options take precedence:
-    SetupServerArgs(gArgs);
+    SetupServerArgs(gArgs, init->canListenIpc());
     SetupUIArgs(gArgs);
     std::string error;
     if (!gArgs.ParseParameters(argc, argv, error)) {

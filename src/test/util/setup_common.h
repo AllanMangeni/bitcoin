@@ -1,4 +1,4 @@
-// Copyright (c) 2015-2022 The Bitcoin Core developers
+// Copyright (c) 2015-present The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -10,9 +10,12 @@
 #include <key.h>
 #include <node/caches.h>
 #include <node/context.h> // IWYU pragma: export
+#include <optional>
+#include <ostream>
 #include <primitives/transaction.h>
 #include <pubkey.h>
 #include <stdexcept>
+#include <test/util/random.h>
 #include <util/chaintype.h> // IWYU pragma: export
 #include <util/check.h>
 #include <util/fs.h>
@@ -28,6 +31,8 @@ class arith_uint256;
 class CFeeRate;
 class Chainstate;
 class FastRandomContext;
+class uint160;
+class uint256;
 
 /** This is connected to the logger. Can be used to redirect logs to any other log */
 extern const std::function<void(const std::string&)> G_TEST_LOG_FUN;
@@ -38,15 +43,6 @@ extern const std::function<std::vector<const char*>()> G_TEST_COMMAND_LINE_ARGUM
 /** Retrieve the unit test name. */
 extern const std::function<std::string()> G_TEST_GET_FULL_NAME;
 
-// Enable BOOST_CHECK_EQUAL for enum class types
-namespace std {
-template <typename T>
-std::ostream& operator<<(typename std::enable_if<std::is_enum<T>::value, std::ostream>::type& stream, const T& e)
-{
-    return stream << static_cast<typename std::underlying_type<T>::type>(e);
-}
-} // namespace std
-
 static constexpr CAmount CENT{1000000};
 
 struct TestOpts {
@@ -55,6 +51,7 @@ struct TestOpts {
     bool block_tree_db_in_memory{true};
     bool setup_net{true};
     bool setup_validation_interface{true};
+    bool min_validation_cache{false}; // Equivalent of -maxsigcachebytes=0
 };
 
 /** Basic testing setup.
@@ -63,6 +60,14 @@ struct TestOpts {
 struct BasicTestingSetup {
     util::SignalInterrupt m_interrupt;
     node::NodeContext m_node; // keep as first member to be destructed last
+
+    FastRandomContext m_rng;
+    /** Seed the global RNG state and m_rng for testing and log the seed value. This affects all randomness, except GetStrongRandBytes(). */
+    void SeedRandomForTest(SeedRand seed)
+    {
+        SeedRandomStateForTest(seed);
+        m_rng.Reseed(GetRandHash());
+    }
 
     explicit BasicTestingSetup(const ChainType chainType = ChainType::MAIN, TestOpts = {});
     ~BasicTestingSetup();
@@ -81,6 +86,7 @@ struct ChainTestingSetup : public BasicTestingSetup {
     node::CacheSizes m_cache_sizes{};
     bool m_coins_db_in_memory{true};
     bool m_block_tree_db_in_memory{true};
+    std::function<void()> m_make_chainman{};
 
     explicit ChainTestingSetup(const ChainType chainType = ChainType::MAIN, TestOpts = {});
     ~ChainTestingSetup();
@@ -239,10 +245,26 @@ std::unique_ptr<T> MakeNoLogFileContext(const ChainType chain_type = ChainType::
 
 CBlock getBlock13b8a();
 
-// Make types usable in BOOST_CHECK_*
+// Make types usable in BOOST_CHECK_* @{
+namespace std {
+template <typename T> requires std::is_enum_v<T>
+inline std::ostream& operator<<(std::ostream& os, const T& e)
+{
+    return os << static_cast<std::underlying_type_t<T>>(e);
+}
+
+template <typename T>
+inline std::ostream& operator<<(std::ostream& os, const std::optional<T>& v)
+{
+    return v ? os << *v
+             : os << "std::nullopt";
+}
+} // namespace std
+
 std::ostream& operator<<(std::ostream& os, const arith_uint256& num);
 std::ostream& operator<<(std::ostream& os, const uint160& num);
 std::ostream& operator<<(std::ostream& os, const uint256& num);
+// @}
 
 /**
  * BOOST_CHECK_EXCEPTION predicates to check the specific validation error.
@@ -252,11 +274,9 @@ std::ostream& operator<<(std::ostream& os, const uint256& num);
 class HasReason
 {
 public:
-    explicit HasReason(const std::string& reason) : m_reason(reason) {}
-    bool operator()(const std::exception& e) const
-    {
-        return std::string(e.what()).find(m_reason) != std::string::npos;
-    };
+    explicit HasReason(std::string_view reason) : m_reason(reason) {}
+    bool operator()(std::string_view s) const { return s.find(m_reason) != std::string_view::npos; }
+    bool operator()(const std::exception& e) const { return (*this)(e.what()); }
 
 private:
     const std::string m_reason;
